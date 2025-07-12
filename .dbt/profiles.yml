@@ -2,10 +2,10 @@ gastos_publicos:
   outputs:
     dev:
       dbname: airflow
-      host: postgres_estudos
+      host: postgres
       pass: airflow
       port: 5432
-      schema: public
+      schema: gastos_publicos
       threads: 4
       type: postgres
       user: airflow

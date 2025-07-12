@@ -1,7 +1,21 @@
+version: '3.9'
+
 services:
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    networks:
+      - rede
+
   postgres:
     image: postgres:15
-    container_name: postgres_estudos
+    container_name: postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -9,60 +23,93 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres_estudos:/var/lib/postgresql/data
+      - ./postgres:/var/lib/postgresql/data
+    networks:
+      - rede
+  
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
     networks:
       - rede
 
   airflow-init:
     image: apache/airflow:2.9.1
     container_name: airflow-init
-    entrypoint: ["bash", "-c", "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com"]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        airflow db init &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_estudos:5432/airflow
-      - AIRFLOW__WEBSERVER__SECRET_KEY=uma_chave_muito_secreta_123
-      - AIRFLOW__LOGGING__REMOTE_LOGGING=False
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: uma_chave_muito_secreta_123
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
     depends_on:
       - postgres
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
     networks:
       - rede
 
   airflow-webserver:
-    image: apache/airflow:2.9.1
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
     container_name: airflow-webserver
     restart: always
     depends_on:
       - postgres
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_estudos:5432/airflow
-      - _AIRFLOW_WWW_USER_USERNAME=admin
-      - _AIRFLOW_WWW_USER_PASSWORD=admin
-      - AIRFLOW__WEBSERVER__SECRET_KEY=uma_chave_muito_secreta_123
-      - AIRFLOW__LOGGING__REMOTE_LOGGING=False
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: uma_chave_muito_secreta_123
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
     ports:
       - "8080:8080"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./dbt:/opt/airflow/dbt
+      - ./.dbt:/home/airflow/.dbt
     command: webserver
     networks:
       - rede
 
   airflow-scheduler:
-    image: apache/airflow:2.9.1
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
     container_name: airflow-scheduler
     restart: always
     depends_on:
-      - airflow-webserver
+      - postgres
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_estudos:5432/airflow
-      - AIRFLOW__WEBSERVER__SECRET_KEY=uma_chave_muito_secreta_123
-      - AIRFLOW__LOGGING__REMOTE_LOGGING=False
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: uma_chave_muito_secreta_123
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./dbt:/opt/airflow/dbt
+      - ./.dbt:/home/airflow/.dbt
     command: scheduler
     networks:
       - rede
@@ -74,7 +121,7 @@ services:
       - ./dbt/gastos_publicos:/usr/app
       - ./.dbt:/root/.dbt
     working_dir: /usr/app
-    entrypoint: ["sh", "-c", "sleep infinity"]
+    entrypoint: [ "sh", "-c", "sleep infinity" ]
     depends_on:
       - postgres
     networks:

@@ -1,0 +1,16 @@
+FROM apache/airflow:2.9.1
+
+USER root
+
+# Instalar dependências do sistema
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Instalar dbt-postgres
+RUN pip install --no-cache-dir dbt-postgres
+
+# Voltar para o usuário padrão
+USER airflow

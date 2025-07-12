@@ -3,8 +3,7 @@ from airflow.operators.python import PythonOperator # type: ignore
 from datetime import datetime, timedelta
 import pandas as pd
 import requests
-from sqlalchemy import create_engine
-from sqlalchemy.schema import CreateSchema
+from sqlalchemy import create_engine, text
 
 DEFAULT_ARGS = {
     'owner': 'admin',
@@ -15,7 +14,7 @@ DEFAULT_ARGS = {
 }
 
 def extrair_resumo(**kwargs):
-    data_ini = kwargs['data_inicial'] 
+    data_ini = kwargs['data_inicial']
     data_fim = kwargs['data_final']
     mode = kwargs['mode']
 
@@ -43,21 +42,22 @@ def extrair_resumo(**kwargs):
             break
 
     df = pd.DataFrame(todos_dados)
-    engine = create_engine("postgresql+psycopg2://airflow:airflow@localhost:5432/airflow")
+    engine = create_engine("postgresql+psycopg2://airflow:airflow@postgres:5432/airflow")
 
     with engine.connect() as conn:
-        conn.execute(CreateSchema("gold", if_not_exists=True))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS gastos_publicos_bronze"))
 
-    df.to_sql("diarias_resumo", con=engine, schema="bronze", if_exists=mode, index=False)
-    print(f"{len(df)} registros inseridos em bronze.diarias_resumo")
+
+    df.to_sql("diarias_resumo", con=engine, schema="gastos_publicos_bronze", if_exists=mode, index=False)
+    print(f"{len(df)} registros inseridos em gastos_publicos_bronze.diarias_resumo")
 
 def extrair_favorecidos(**kwargs):
     data_ini = kwargs['data_inicial']
     data_fim = kwargs['data_final']
     mode = kwargs['mode']
 
-    engine = create_engine("postgresql+psycopg2://airflow:airflow@localhost:5432/airflow")
-    ugs_df = pd.read_sql("SELECT DISTINCT ug FROM bronze.diarias_resumo", con=engine)
+    engine = create_engine("postgresql+psycopg2://airflow:airflow@postgres:5432/airflow")
+    ugs_df = pd.read_sql("SELECT DISTINCT ug FROM gastos_publicos_bronze.diarias_resumo", con=engine)
     limit = 100
     todos_dados = []
 
@@ -86,17 +86,17 @@ def extrair_favorecidos(**kwargs):
 
     df = pd.DataFrame(todos_dados)
     with engine.connect() as conn:
-        conn.execute(CreateSchema("bronze", if_not_exists=True))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS gastos_publicos_bronze"))
 
-    df.to_sql("diarias_favorecidos", con=engine, schema="bronze", if_exists=mode, index=False)
-    print(f"{len(df)} registros inseridos em bronze.diarias_favorecidos")
+    df.to_sql("diarias_favorecidos", con=engine, schema="gastos_publicos_bronze", if_exists=mode, index=False)
+    print(f"{len(df)} registros inseridos em gastos_publicos_bronze.diarias_favorecidos")
 
 with DAG(
     dag_id='extract_diarias_mensal',
     default_args=DEFAULT_ARGS,
     schedule_interval=None,
     catchup=False,
-    tags=['bronze', 'extracao'],
+    tags=['gastos_publicos_bronze', 'extracao'],
 ) as dag:
 
     task_resumo = PythonOperator(

@@ -22,11 +22,11 @@ clean-targets:
   - "dbt_packages"
 
 models:
-  models:
   gastos_publicos:
-    bronze:
-      +schema: bronze
+    +materialized: table
     silver:
+      +materialized: table
       +schema: silver
     gold:
+      +materialized: table
       +schema: gold
